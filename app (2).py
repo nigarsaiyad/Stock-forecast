@@ -12,7 +12,7 @@ import joblib
 
 st.set_page_config(
     page_title="Reliance Industries | AI Stock Forecast",
-    page_icon="📈",
+    page_icon="🔭",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -168,7 +168,7 @@ historical_data = pd.to_numeric(
 # SIDEBAR
 # =========================================================
 
-st.sidebar.title("⚙️ Forecast Control")
+st.sidebar.header("🚀 ARIMA Forecast Control")
 
 st.sidebar.markdown("### Forecast Horizon")
 
