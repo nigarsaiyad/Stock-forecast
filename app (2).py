@@ -1,16 +1,17 @@
 ```python
 import streamlit as st
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import joblib
 
 
 # =========================================================
-# PAGE CONFIGURATION
+# PAGE CONFIG
 # =========================================================
 
 st.set_page_config(
-    page_title="Reliance Industries | ARIMA Forecast",
+    page_title="Reliance Industries | AI Stock Forecast",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -24,74 +25,82 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-.stApp {
-    background: linear-gradient(
-        135deg,
-        #0b1220 0%,
-        #111827 50%,
-        #0f172a 100%
-    );
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    max-width: 1400px;
 }
 
+/* Main title */
+
 .hero-title {
-    font-size: 46px;
+    font-size: 44px;
     font-weight: 800;
     text-align: center;
-    margin-top: 10px;
     margin-bottom: 5px;
 }
 
 .hero-subtitle {
     text-align: center;
     font-size: 18px;
-    color: #9ca3af;
-    margin-bottom: 20px;
+    color: #9aa4b2;
+    margin-bottom: 35px;
 }
 
-.model-badge {
-    display: inline-block;
-    padding: 7px 16px;
-    border-radius: 20px;
-    background: rgba(59,130,246,0.15);
-    border: 1px solid rgba(59,130,246,0.30);
-    color: #60a5fa;
-    font-weight: 600;
-}
+/* Metric cards */
 
-.section-title {
-    font-size: 25px;
-    font-weight: 700;
-    margin-top: 30px;
-    margin-bottom: 15px;
-}
-
-.dashboard-card {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
+.metric-card {
     padding: 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(128,128,128,0.25);
+    background: rgba(128,128,128,0.06);
     text-align: center;
-    min-height: 120px;
 }
 
-.card-label {
-    color: #9ca3af;
-    font-size: 13px;
-    font-weight: 600;
+.metric-label {
+    font-size: 14px;
+    color: #9aa4b2;
     margin-bottom: 8px;
 }
 
-.card-value {
-    font-size: 27px;
-    font-weight: 700;
+.metric-value {
+    font-size: 28px;
+    font-weight: 750;
 }
+
+.metric-positive {
+    color: #21c77a;
+}
+
+.metric-negative {
+    color: #ff5c5c;
+}
+
+/* Section headings */
+
+.section-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin-top: 20px;
+}
+
+/* Model badge */
+
+.model-badge {
+    display: inline-block;
+    padding: 7px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(128,128,128,0.35);
+    font-weight: 600;
+}
+
+/* Footer */
 
 .footer {
     text-align: center;
-    color: #6b7280;
+    color: #8b949e;
     font-size: 13px;
-    margin-top: 40px;
-    padding: 20px;
+    margin-top: 35px;
 }
 
 </style>
@@ -99,31 +108,7 @@ st.markdown("""
 
 
 # =========================================================
-# HEADER
-# =========================================================
-
-st.markdown(
-    '<div class="hero-title">📈 Reliance Industries</div>',
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    '<div class="hero-subtitle">'
-    'AI-Powered Time-Series Stock Forecasting Dashboard'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    '<div style="text-align:center;">'
-    '<span class="model-badge">ARIMA (1,0,2)</span>'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-
-# =========================================================
-# LOAD TRAINED MODEL
+# LOAD MODEL
 # =========================================================
 
 @st.cache_resource
@@ -138,9 +123,7 @@ try:
 
 except Exception as e:
 
-    st.error(
-        "❌ Unable to load the trained ARIMA model."
-    )
+    st.error("❌ Unable to load the trained ARIMA model.")
 
     st.exception(e)
 
@@ -148,14 +131,21 @@ except Exception as e:
 
 
 # =========================================================
-# RECOVER ORIGINAL HISTORICAL DATA
+# HISTORICAL DATA
 # =========================================================
 
 original_data = model.data.orig_endog
 
-historical_values = pd.Series(
-    original_data
-).astype(float).values
+historical_values = (
+    pd.Series(original_data)
+    .astype(float)
+    .values
+)
+
+# Reconstruct trading-day index.
+#
+# The model contains the historical observations but
+# statsmodels did not preserve a supported DatetimeIndex.
 
 historical_dates = pd.bdate_range(
     end="2023-10-16",
@@ -173,49 +163,75 @@ historical_data = pd.to_numeric(
     errors="coerce"
 ).dropna()
 
-st.write("Historical data:")
-st.write(historical_data.tail())
-
-st.write("First date:", historical_data.index[0])
-st.write("Last date:", historical_data.index[-1])
-
 
 # =========================================================
 # SIDEBAR
 # =========================================================
 
-st.sidebar.title("⚙️ Forecast Controls")
+st.sidebar.title("⚙️ Forecast Control")
 
-forecast_period = st.sidebar.selectbox(
-    "Forecast Horizon",
-    [7, 14, 30],
-    index=2
+st.sidebar.markdown("### Forecast Horizon")
+
+forecast_period = st.sidebar.select_slider(
+    "Select forecast period",
+    options=[7, 14, 30],
+    value=30
 )
 
 st.sidebar.markdown("---")
 
-st.sidebar.subheader("🤖 Model")
+st.sidebar.markdown("### Model")
+
+st.sidebar.info(
+    """
+    **ARIMA(1,0,2)**
+
+    AutoRegressive Integrated Moving Average
+
+    Validation:
+    Rolling one-step-ahead forecasting
+    """
+)
+
+st.sidebar.markdown("---")
+
+st.sidebar.markdown("### Project")
 
 st.sidebar.write(
-    "**ARIMA(1,0,2)**"
+    "Reliance Industries Stock Forecast"
 )
 
-st.sidebar.caption(
-    "Multi-step future forecast"
+st.sidebar.write(
+    "Historical data: 2020–2023"
 )
-
-st.sidebar.markdown("---")
-
-st.sidebar.subheader("📊 Validation Performance")
-
-st.sidebar.write("MAE: **6.213**")
-st.sidebar.write("RMSE: **8.610**")
-st.sidebar.write("MAPE: **1.608%**")
-st.sidebar.write("R²: **0.967**")
 
 
 # =========================================================
-# GENERATE FORECAST
+# HERO
+# =========================================================
+
+st.markdown(
+    '<div class="hero-title">📈 Reliance Industries Stock Forecast</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div class="hero-subtitle">'
+    'AI-powered time-series forecasting using ARIMA(1,0,2)'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div style="text-align:center;">'
+    '<span class="model-badge">ARIMA(1,0,2)</span>'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+
+# =========================================================
+# FORECAST
 # =========================================================
 
 forecast_result = model.get_forecast(
@@ -230,7 +246,7 @@ confidence_interval = forecast_result.conf_int(
 
 
 # =========================================================
-# FUTURE TRADING DATES
+# FUTURE DATES
 # =========================================================
 
 last_date = historical_data.index[-1]
@@ -255,7 +271,9 @@ forecast_df = pd.DataFrame({
     "Upper Bound":
         confidence_interval.iloc[:, 1].values
 
-}, index=future_dates)
+})
+
+forecast_df.index = future_dates
 
 forecast_df.index.name = "Date"
 
@@ -277,15 +295,20 @@ expected_change = (
     / latest_price
 ) * 100
 
-
-# =========================================================
-# MARKET SNAPSHOT
-# =========================================================
-
-st.markdown(
-    '<div class="section-title">📊 Market Snapshot</div>',
-    unsafe_allow_html=True
+forecast_low = float(
+    forecast_df["Lower Bound"].iloc[-1]
 )
+
+forecast_high = float(
+    forecast_df["Upper Bound"].iloc[-1]
+)
+
+
+# =========================================================
+# KPI CARDS
+# =========================================================
+
+st.markdown("### 📊 Forecast Overview")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -294,11 +317,9 @@ with col1:
 
     st.markdown(
         f"""
-        <div class="dashboard-card">
-            <div class="card-label">
-                LATEST CLOSE
-            </div>
-            <div class="card-value">
+        <div class="metric-card">
+            <div class="metric-label">Latest Close</div>
+            <div class="metric-value">
                 ₹{latest_price:,.2f}
             </div>
         </div>
@@ -311,11 +332,11 @@ with col2:
 
     st.markdown(
         f"""
-        <div class="dashboard-card">
-            <div class="card-label">
-                {forecast_period}-DAY FORECAST
+        <div class="metric-card">
+            <div class="metric-label">
+                {forecast_period}-Period Forecast
             </div>
-            <div class="card-value">
+            <div class="metric-value">
                 ₹{final_forecast:,.2f}
             </div>
         </div>
@@ -326,16 +347,22 @@ with col2:
 
 with col3:
 
-    icon = "📈" if expected_change >= 0 else "📉"
+    change_class = (
+        "metric-positive"
+        if expected_change >= 0
+        else "metric-negative"
+    )
+
+    arrow = "▲" if expected_change >= 0 else "▼"
 
     st.markdown(
         f"""
-        <div class="dashboard-card">
-            <div class="card-label">
-                EXPECTED CHANGE
+        <div class="metric-card">
+            <div class="metric-label">
+                Expected Change
             </div>
-            <div class="card-value">
-                {icon} {expected_change:+.2f}%
+            <div class="metric-value {change_class}">
+                {arrow} {abs(expected_change):.2f}%
             </div>
         </div>
         """,
@@ -346,13 +373,13 @@ with col3:
 with col4:
 
     st.markdown(
-        """
-        <div class="dashboard-card">
-            <div class="card-label">
-                MODEL
+        f"""
+        <div class="metric-card">
+            <div class="metric-label">
+                Forecast Range
             </div>
-            <div class="card-value">
-                ARIMA
+            <div class="metric-value">
+                ₹{forecast_low:,.0f} – ₹{forecast_high:,.0f}
             </div>
         </div>
         """,
@@ -361,7 +388,7 @@ with col4:
 
 
 # =========================================================
-# FORECAST SIGNAL
+# FORECAST SUMMARY
 # =========================================================
 
 st.markdown("---")
@@ -369,46 +396,42 @@ st.markdown("---")
 if expected_change > 0:
 
     st.success(
-        f"📈 **Forecast Signal:** The model projects "
-        f"a potential increase of **{expected_change:.2f}%** "
-        f"over the selected forecast horizon."
+        f"📈 **Forecast outlook:** ARIMA predicts an increase "
+        f"of **{expected_change:.2f}%** over the selected "
+        f"{forecast_period}-period horizon."
     )
 
 elif expected_change < 0:
 
     st.warning(
-        f"📉 **Forecast Signal:** The model projects "
-        f"a potential decrease of **{abs(expected_change):.2f}%** "
-        f"over the selected forecast horizon."
+        f"📉 **Forecast outlook:** ARIMA predicts a decrease "
+        f"of **{abs(expected_change):.2f}%** over the selected "
+        f"{forecast_period}-period horizon."
     )
 
 else:
 
     st.info(
-        "➡️ **Forecast Signal:** The model projects "
+        "➡️ **Forecast outlook:** The model predicts "
         "relatively stable prices."
     )
 
 
 # =========================================================
-# PRICE CHART
+# CHART
 # =========================================================
 
 st.markdown(
-    '<div class="section-title">'
-    '📈 Historical Price & Future Forecast'
-    '</div>',
+    '<div class="section-title">📈 Historical Price & Forecast</div>',
     unsafe_allow_html=True
 )
 
 fig, ax = plt.subplots(
-    figsize=(15, 7)
+    figsize=(14, 6)
 )
 
 recent_history = historical_data.tail(120)
 
-
-# Historical price
 ax.plot(
     recent_history.index,
     recent_history.values,
@@ -416,8 +439,6 @@ ax.plot(
     linewidth=2
 )
 
-
-# Forecast
 ax.plot(
     forecast_df.index,
     forecast_df["Forecast"],
@@ -425,8 +446,6 @@ ax.plot(
     linewidth=2.5
 )
 
-
-# Confidence interval
 ax.fill_between(
     forecast_df.index,
     forecast_df["Lower Bound"],
@@ -435,18 +454,17 @@ ax.fill_between(
     label="95% Confidence Interval"
 )
 
-
-# Forecast start
 ax.axvline(
-    last_date,
+    historical_data.index[-1],
     linestyle="--",
     linewidth=1.5,
     label="Forecast Start"
 )
 
-
 ax.set_title(
-    f"Reliance Industries — {forecast_period} Trading-Day Forecast"
+    f"ARIMA(1,0,2) — {forecast_period}-Period Forecast",
+    fontsize=16,
+    fontweight="bold"
 )
 
 ax.set_xlabel("Date")
@@ -468,10 +486,10 @@ st.pyplot(fig)
 # FORECAST TABLE
 # =========================================================
 
+st.markdown("---")
+
 st.markdown(
-    '<div class="section-title">'
-    '🔮 Forecast Details'
-    '</div>',
+    '<div class="section-title">🔮 Forecast Details</div>',
     unsafe_allow_html=True
 )
 
@@ -496,58 +514,55 @@ st.dataframe(
 
 
 # =========================================================
-# DOWNLOAD FORECAST
-# =========================================================
-
-csv = display_df.to_csv().encode("utf-8")
-
-st.download_button(
-    label="⬇️ Download Forecast CSV",
-    data=csv,
-    file_name="reliance_arima_forecast.csv",
-    mime="text/csv"
-)
-
-
-# =========================================================
 # MODEL PERFORMANCE
 # =========================================================
 
 st.markdown("---")
 
 st.markdown(
-    '<div class="section-title">'
-    '🎯 Model Performance'
-    '</div>',
+    '<div class="section-title">🤖 Model Performance</div>',
     unsafe_allow_html=True
 )
 
-p1, p2, p3, p4 = st.columns(4)
+perf1, perf2, perf3, perf4 = st.columns(4)
 
 
-with p1:
+with perf1:
+
     st.metric(
         "MAE",
-        "6.213"
+        "6.192"
     )
 
-with p2:
+
+with perf2:
+
     st.metric(
         "RMSE",
-        "8.610"
+        "8.595"
     )
 
-with p3:
+
+with perf3:
+
     st.metric(
         "MAPE",
-        "1.608%"
+        "1.601%"
     )
 
-with p4:
+
+with perf4:
+
     st.metric(
         "R²",
         "0.967"
     )
+
+
+st.caption(
+    "Performance metrics are based on rolling one-step-ahead "
+    "validation of the ARIMA model."
+)
 
 
 # =========================================================
@@ -556,62 +571,136 @@ with p4:
 
 st.markdown("---")
 
-with st.expander("🧠 How does ARIMA work?"):
+st.markdown(
+    '<div class="section-title">🧠 Understanding the Model</div>',
+    unsafe_allow_html=True
+)
 
-    st.write(
+with st.expander(
+    "What does ARIMA(1,0,2) mean?"
+):
+
+    st.markdown(
         """
-        **ARIMA** stands for **AutoRegressive Integrated
-        Moving Average**.
+        **ARIMA** stands for:
 
-        The selected model is **ARIMA(1,0,2)**.
+        **AutoRegressive Integrated Moving Average**
 
-        **p = 1 — AutoRegressive**
+        The selected configuration is:
 
-        Uses one previous observation to help predict
-        future values.
+        **ARIMA(1,0,2)**
 
-        **d = 0 — Integrated**
+        **p = 1 — AutoRegressive component**
 
-        No differencing was required for the final model.
+        The model uses one previous observation to help
+        predict the current value.
 
-        **q = 2 — Moving Average**
+        **d = 0 — Differencing**
 
-        Uses information from two previous forecast errors.
+        No differencing was required for the final model,
+        meaning the original price series was modeled directly.
 
-        The model was evaluated using rolling
-        one-step-ahead validation before being used
-        for future forecasting.
+        **q = 2 — Moving Average component**
+
+        The model incorporates information from the previous
+        two forecast errors.
+
+        The model was selected after comparing multiple
+        ARIMA configurations and evaluating them using
+        rolling one-step-ahead forecasting.
+        """
+    )
+
+
+with st.expander(
+    "Why was ARIMA selected?"
+):
+
+    st.markdown(
+        """
+        ARIMA was selected because it is specifically designed
+        for time-series forecasting and can model temporal
+        dependencies in historical stock prices.
+
+        The model was evaluated using rolling validation rather
+        than relying only on training-set performance.
+
+        Final validation performance:
+
+        - **MAE:** 6.192
+        - **RMSE:** 8.595
+        - **MAPE:** 1.601%
+        - **R²:** 0.967
+
+        These metrics indicate that the model provides a strong
+        fit on the validation period, although stock prices
+        remain inherently difficult to forecast.
+        """
+    )
+
+
+with st.expander(
+    "How should the forecast be interpreted?"
+):
+
+    st.markdown(
+        """
+        The forecast represents the model's estimated future
+        closing prices based on historical price behavior.
+
+        The shaded area represents the **95% confidence interval**.
+
+        A wider interval indicates greater uncertainty.
+
+        The forecast should therefore be interpreted as a
+        statistical estimate rather than a guaranteed future
+        price.
         """
     )
 
 
 # =========================================================
-# PROJECT INFORMATION
+# PROJECT SUMMARY
 # =========================================================
 
-with st.expander("📚 About this project"):
+st.markdown("---")
 
-    st.write(
+st.markdown(
+    '<div class="section-title">🚀 Project Summary</div>',
+    unsafe_allow_html=True
+)
+
+summary_col1, summary_col2 = st.columns(2)
+
+
+with summary_col1:
+
+    st.markdown(
         """
-        This project demonstrates an end-to-end
-        time-series forecasting workflow:
+        ### 📌 Machine Learning Pipeline
 
-        • Historical stock-price analysis
+        **Historical Data → EDA → Time-Series Analysis →  
+        ARIMA Model Selection → Rolling Validation →  
+        Forecast → Streamlit Deployment**
+        """
+    )
 
-        • Time-series preprocessing
 
-        • ARIMA model selection
+with summary_col2:
 
-        • Rolling validation
+    st.markdown(
+        """
+        ### 🛠️ Technology Stack
 
-        • Model evaluation
+        - Python
+        - Pandas
+        - NumPy
+        - Statsmodels
+        - Joblib
+        - Matplotlib
+        - Streamlit
 
-        • Future forecasting
-
-        • Interactive Streamlit deployment
-
-        The goal is to demonstrate practical
-        time-series modeling and deployment skills.
+        **Model:** ARIMA(1,0,2)
         """
     )
 
@@ -623,27 +712,15 @@ with st.expander("📚 About this project"):
 st.markdown("---")
 
 st.warning(
-    "⚠️ **Disclaimer:** This application is for educational "
-    "and analytical purposes only. Stock-price forecasts "
-    "are inherently uncertain and should not be considered "
-    "financial advice or a recommendation to buy or sell "
-    "securities."
+    "⚠️ This application is for educational and analytical "
+    "purposes only. Stock-market forecasts are uncertain and "
+    "should not be considered financial advice."
 )
 
-
-# =========================================================
-# FOOTER
-# =========================================================
-
 st.markdown(
-    """
-    <div class="footer">
-        Built with Python • Pandas • Statsmodels •
-        Matplotlib • Streamlit
-        <br><br>
-        Reliance Industries Stock Forecasting Project
-    </div>
-    """,
+    '<div class="footer">'
+    'Built with Python • Statsmodels • Streamlit • ARIMA'
+    '</div>',
     unsafe_allow_html=True
 )
 ```
