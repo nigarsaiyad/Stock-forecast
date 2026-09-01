@@ -153,9 +153,18 @@ except Exception as e:
 
 original_data = model.data.orig_endog
 
+historical_values = pd.Series(
+    original_data
+).astype(float).values
+
+historical_dates = pd.bdate_range(
+    end="2023-10-16",
+    periods=len(historical_values)
+)
+
 historical_data = pd.Series(
-    original_data.values,
-    index=original_data.index,
+    historical_values,
+    index=historical_dates,
     name="Close"
 )
 
@@ -163,6 +172,12 @@ historical_data = pd.to_numeric(
     historical_data,
     errors="coerce"
 ).dropna()
+
+st.write("Historical data:")
+st.write(historical_data.tail())
+
+st.write("First date:", historical_data.index[0])
+st.write("Last date:", historical_data.index[-1])
 
 
 # =========================================================
