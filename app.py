@@ -135,50 +135,33 @@ st.sidebar.write(
     "Forecast Type: One-step rolling validated model"
 )
 
+# =========================================================
+# FUTURE DATES
+# =========================================================
+
+last_date = historical_data.index[-1]
+
+future_dates = pd.bdate_range(
+    start=last_date + pd.Timedelta(days=1),
+    periods=forecast_period
+)
+
 
 # =========================================================
 # FORECAST
 # =========================================================
 
-forecast_result = model.get_forecast(
-    steps=forecast_period
+forecast_result = model.get_prediction(
+    start=model.nobs,
+    end=model.nobs + forecast_period - 1,
+    index=future_dates
 )
 
-forecast_mean = (
-    forecast_result.predicted_mean
+forecast_mean = forecast_result.predicted_mean
+
+confidence_interval = forecast_result.conf_int(
+    alpha=0.05
 )
-
-confidence_interval = (
-    forecast_result.conf_int(
-        alpha=0.05
-    )
-)
-
-
-# =========================================================
-# CREATE FUTURE DATES
-# =========================================================
-
-last_date = historical_data.index[-1]
-
-try:
-
-    last_date = pd.to_datetime(
-        last_date
-    )
-
-    future_dates = pd.bdate_range(
-        start=last_date + pd.Timedelta(days=1),
-        periods=forecast_period
-    )
-
-except:
-
-    future_dates = range(
-        1,
-        forecast_period + 1
-    )
-
 
 # =========================================================
 # FORECAST DATAFRAME
